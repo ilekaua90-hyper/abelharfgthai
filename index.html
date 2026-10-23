@@ -303,20 +303,23 @@
       <!-- ABA ALUNOS -->
       <div id="tabStudents" class="flex-1 flex flex-col overflow-hidden">
         <div class="flex flex-col sm:flex-row justify-between items-center gap-3 mb-4">
-          <input type="text" id="adminSearch" oninput="renderStudentsTable()" placeholder="Buscar aluno por nome ou telefone..." class="bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 text-white text-xs w-full sm:w-64">
+          <input type="text" id="adminSearch" oninput="renderStudentsTable()" placeholder="Buscar por nome, ID ou telefone..." class="bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 text-white text-xs w-full sm:w-64">
           <button onclick="exportCSV()" class="bg-zinc-800 hover:bg-zinc-700 text-gray-300 px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2">
             <i class="fa-solid fa-file-csv"></i>
             <span>Exportar CSV</span>
           </button>
         </div>
 
-        <div class="flex-1 overflow-y-auto border border-zinc-800 rounded-xl">
-          <table class="w-full text-left text-xs text-gray-300">
+        <div class="flex-1 overflow-auto border border-zinc-800 rounded-xl">
+          <table class="w-full min-w-[960px] text-left text-xs text-gray-300">
             <thead class="bg-zinc-950 text-gray-400 font-bold sticky top-0">
               <tr>
                 <th class="p-3">ID</th>
                 <th class="p-3">Nome</th>
+                <th class="p-3">Nascimento</th>
                 <th class="p-3">WhatsApp</th>
+                <th class="p-3">Contato de Emergência</th>
+                <th class="p-3">Restrição / Lesão</th>
                 <th class="p-3">Data Inscrição</th>
                 <th class="p-3 text-center">Cobrança / Ação</th>
               </tr>
@@ -495,12 +498,27 @@
       }
     }
 
+    function escapeHtml(str) {
+      return String(str || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    function formatDob(dob) {
+      if (!dob) return '<span class="text-gray-600">—</span>';
+      const [y, m, d] = dob.split('-').map(Number);
+      if (!y || !m || !d) return '<span class="text-gray-600">—</span>';
+      const today = new Date();
+      let age = today.getFullYear() - y;
+      if (today.getMonth() + 1 < m || (today.getMonth() + 1 === m && today.getDate() < d)) age--;
+      const br = String(d).padStart(2, '0') + '/' + String(m).padStart(2, '0') + '/' + y;
+      return `${br} <span class="text-gray-500">(${age} anos)</span>`;
+    }
+
     function renderStudentsTable() {
       const tbody = document.getElementById('studentsTableBody');
       const search = document.getElementById('adminSearch').value.toLowerCase();
       tbody.innerHTML = '';
 
-      const filtered = students.filter(s => s.name.toLowerCase().includes(search) || s.phone.includes(search));
+      const filtered = students.filter(s => s.name.toLowerCase().includes(search) || s.phone.includes(search) || s.id.toLowerCase().includes(search));
 
       filtered.forEach(s => {
         const cleanPhone = s.phone.replace(/\D/g, '');
@@ -509,8 +527,11 @@
         tbody.innerHTML += `
           <tr class="hover:bg-zinc-950/50">
             <td class="p-3 font-mono text-brand-yellow">${s.id}</td>
-            <td class="p-3 font-bold text-white">${s.name}</td>
-            <td class="p-3">${s.phone}</td>
+            <td class="p-3 font-bold text-white">${escapeHtml(s.name)}</td>
+            <td class="p-3 whitespace-nowrap">${formatDob(s.dob)}</td>
+            <td class="p-3">${escapeHtml(s.phone)}</td>
+            <td class="p-3">${s.emergency ? escapeHtml(s.emergency) : '<span class="text-gray-600">—</span>'}</td>
+            <td class="p-3 max-w-[220px]">${s.health ? '<span class="text-red-300 font-semibold">' + escapeHtml(s.health) + '</span>' : '<span class="text-gray-600">Nenhuma</span>'}</td>
             <td class="p-3 text-gray-400">${s.createdAt}</td>
             <td class="p-3 text-center space-x-2">
               <a href="https://wa.me/55${cleanPhone}?text=${chargeMsg}" target="_blank" class="bg-green-700 hover:bg-green-600 text-white px-2.5 py-1 rounded text-xs inline-flex items-center space-x-1">
@@ -589,9 +610,11 @@
     }
 
     function exportCSV() {
-      let csv = 'ID,Nome,WhatsApp,DataInscricao\n';
+      const q = v => '"' + String(v || '').replace(/"/g, '""') + '"';
+      let csv = '\uFEFFID,Nome,DataNascimento,WhatsApp,ContatoEmergencia,RestricaoLesao,DataInscricao\n';
       students.forEach(s => {
-        csv += `"${s.id}","${s.name}","${s.phone}","${s.createdAt}"\n`;
+        const dob = s.dob ? s.dob.split('-').reverse().join('/') : '';
+        csv += [q(s.id), q(s.name), q(dob), q(s.phone), q(s.emergency), q(s.health), q(s.createdAt)].join(',') + '\n';
       });
       const blob = new Blob([csv], { type: 'text/csv' });
       const url = window.URL.createObjectURL(blob);
